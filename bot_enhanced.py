@@ -1334,11 +1334,11 @@ async def main():
         logger.error(f"Critical error in main: {e}")
         raise
     finally:
-        
-if __name__ == "__main__":
-    asyncio.run(main())
-        logger.info("Bot stopped")
-        await asyncio.sleep(1)
+        await bot.session.close()
+        logger.info("Bot session closed")
+
+    logger.info("Bot stopped")
+    await asyncio.sleep(1)
 
 if __name__ == "__main__":
     asyncio.run(main())
