@@ -1334,11 +1334,7 @@ async def main():
         logger.error(f"Critical error in main: {e}")
         raise
     finally:
-        await bot.session.close()
-        logger.info("Bot session closed")
-        async def main():
-    await dp.start_polling(bot)
-
+        
 if __name__ == "__main__":
     asyncio.run(main())
         logger.info("Bot stopped")
