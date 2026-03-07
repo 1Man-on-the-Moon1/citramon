@@ -235,7 +235,7 @@ async def cmd_start(message: types.Message, state: FSMContext):
     
     if user and user['registration_complete']:
         await message.answer(
-            "👋 Добро пожаловать в Vibe Star!\n\n"
+            "👋 Добро пожаловать в Цитрамон!\n\n"
             "Выберите действие:",
             reply_markup=get_main_menu_keyboard(user_id)
         )
@@ -243,7 +243,7 @@ async def cmd_start(message: types.Message, state: FSMContext):
     else:
         await message.answer(
                "👋 Добро пожаловать в Цитрамон - приложение для знакомств с отзывами о свиданиях!\n\n"
-    "Давайте создадим вашу анкету. Как вас зовут? (максимум 20 символов)"
+               "Давайте создадим вашу анкету. Как вас зовут? (максимум 20 символов)"
         )
         await state.set_state(RegistrationState.waiting_for_name)
 
@@ -443,8 +443,8 @@ async def process_interests(query: types.CallbackQuery, state: FSMContext):
         )
         
         await query.message.answer(
-            "✅ Ваша анкета создана!\n\n"
-            "Добро пожаловать в Vibe Star! 🎉",
+            "👋 Добро пожаловать в Цитрамон!\n\n"
+            "Выберите действие:",
             reply_markup=get_main_menu_keyboard(user_id)
         )
         await state.set_state(MainMenuState.main_menu)
