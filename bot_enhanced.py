@@ -242,8 +242,8 @@ async def cmd_start(message: types.Message, state: FSMContext):
         await state.set_state(MainMenuState.main_menu)
     else:
         await message.answer(
-            "👋 Добро пожаловать в Vibe Star - приложение для знакомств в Беларуси!\n\n"
-            "Давайте создадим вашу анкету. Как вас зовут? (максимум 20 символов)"
+               "👋 Добро пожаловать в Цитрамон - приложение для знакомств с отзывами о свиданиях!\n\n"
+    "Давайте создадим вашу анкету. Как вас зовут? (максимум 20 символов)"
         )
         await state.set_state(RegistrationState.waiting_for_name)
 
