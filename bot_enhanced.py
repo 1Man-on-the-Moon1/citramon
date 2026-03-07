@@ -1336,6 +1336,11 @@ async def main():
     finally:
         await bot.session.close()
         logger.info("Bot session closed")
+        async def main():
+    await dp.start_polling(bot)
+
+if __name__ == "__main__":
+    asyncio.run(main())
         logger.info("Bot stopped")
         await asyncio.sleep(1)
 
