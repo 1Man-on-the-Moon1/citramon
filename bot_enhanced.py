@@ -23,8 +23,7 @@ DATABASE_PATH = "/data/profiles.db"
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-init_db()
-db = Database(DATABASE_PATH)
+db = None  # Will be initialized in main()
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
@@ -1459,15 +1458,25 @@ async def publish_ratings():
         await asyncio.sleep(3600)
 
 async def main():
+    global db
     logger.info(f"Starting {BOT_NAME} bot...")
+
+    # Инициализация базы данных внутри контекста выполнения
+    init_db()
+    db = Database(DATABASE_PATH)
+
     try:
         asyncio.create_task(publish_ratings())
         logger.info("Bot started successfully, polling for updates...")
         await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
-    except KeyboardInterrupt: logger.info("Bot interrupted by user")
-    except Exception as e: logger.error(f"Critical error in main: {e}"); raise
-    finally: await bot.session.close(); logger.info("Bot session closed")
+    except KeyboardInterrupt:
+        logger.info("Bot interrupted by user")
+    except Exception as e:
+        logger.error(f"Critical error in main: {e}")
+        raise
+    finally:
+        await bot.session.close()
+        logger.info("Bot session closed")
 
 if __name__ == "__main__":
-    init_db()  # Добавьте эту строку
     asyncio.run(main())
