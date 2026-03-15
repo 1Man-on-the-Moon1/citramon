@@ -13,15 +13,18 @@ from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMar
 from aiogram.utils.keyboard import ReplyKeyboardBuilder, InlineKeyboardBuilder
 
 from config import *
-from database import Database, init_db
+from database import Database, init_db, DATABASE_PATH as DB_PATH
 from i18n import t, set_user_lang, get_user_lang, get_back_text
 from city_i18n import get_city_display_name, get_city_ru_from_display
+
+# Force Railway Persistent Volume path
+DATABASE_PATH = "/data/profiles.db"
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 init_db()
-db = Database()
+db = Database(DATABASE_PATH)
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
