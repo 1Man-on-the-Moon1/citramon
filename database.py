@@ -25,10 +25,10 @@ def _resolve_database_path() -> str:
     env_path = os.environ.get("DATABASE_PATH", "")
     candidates = [
         env_path,
-        "/data/vibestar.db",
-        "/app/data/vibestar.db",
-        os.path.join(os.getcwd(), "vibestar.db"),
-        "/tmp/vibestar.db",
+        "/data/profiles.db",
+        "/app/data/profiles.db",
+        os.path.join(os.getcwd(), "profiles.db"),
+        "/tmp/profiles.db",
     ]
     candidates = [c for c in candidates if c]
     for candidate in candidates:
