@@ -1469,4 +1469,5 @@ async def main():
     finally: await bot.session.close(); logger.info("Bot session closed")
 
 if __name__ == "__main__":
+    init_db()  # Добавьте эту строку
     asyncio.run(main())
