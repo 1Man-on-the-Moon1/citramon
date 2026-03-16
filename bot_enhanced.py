@@ -1,9 +1,11 @@
+```python
 import logging
 import asyncio
 from datetime import datetime, timedelta
 from typing import Optional
 import json
 import re
+from html import escape
 
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command, StateFilter
@@ -146,17 +148,21 @@ def get_cities_keyboard(user_id, country=None):
     return builder.as_markup(resize_keyboard=True)
 
 def get_interests_keyboard(user_id, selected=None):
-    if selected is None: selected = []
+    if selected is None: selected =[]
     builder = InlineKeyboardBuilder()
     for interest in INTERESTS:
         checked = "✅ " if interest in selected else ""
         label = translate_interest(user_id, interest)
         builder.button(text=f"{checked}{label}", callback_data=f"interest_{interest}")
     builder.adjust(2)
+    
+    # Кнопка Готово или Пропустить
     if len(selected) > 0:
-        builder.button(text=t(user_id, 'interests_done'), callback_data="interests_done")
-    builder.button(text=get_back_text(user_id), callback_data="interests_back")
-    builder.adjust(1)
+        builder.row(InlineKeyboardButton(text=t(user_id, 'interests_done'), callback_data="interests_done"))
+    else:
+        builder.row(InlineKeyboardButton(text=t(user_id, 'interests_skip'), callback_data="interests_skip"))
+        
+    builder.row(InlineKeyboardButton(text=get_back_text(user_id), callback_data="interests_back"))
     return builder.as_markup()
 
 def get_main_menu_keyboard(user_id=None):
@@ -234,7 +240,7 @@ def get_rating_keyboard(user_id, date_id):
     return builder.as_markup()
 
 def get_positive_tags_keyboard(user_id, date_id, stars, selected=None):
-    if selected is None: selected = []
+    if selected is None: selected =[]
     builder = InlineKeyboardBuilder()
     for tag in POSITIVE_TAGS:
         prefix = "✅ " if tag in selected else ""
@@ -245,7 +251,7 @@ def get_positive_tags_keyboard(user_id, date_id, stars, selected=None):
     return builder.as_markup()
 
 def get_negative_tags_keyboard(user_id, date_id, stars, selected=None):
-    if selected is None: selected = []
+    if selected is None: selected =[]
     builder = InlineKeyboardBuilder()
     for tag in NEGATIVE_TAGS:
         prefix = "✅ " if tag in selected else ""
@@ -329,7 +335,7 @@ def get_next_profile_to_show(user_id):
     user = db.get_user(user_id)
     if not user: return None
     all_users = db.get_all_users()
-    candidates = []
+    candidates =[]
     for u in all_users:
         if u['user_id'] == user_id: continue
         user_obj = db.get_user(u['user_id'])
@@ -356,14 +362,14 @@ def get_next_profile_to_show(user_id):
     return db.get_user(candidates[0]['user_id'])
 
 def is_menu_button(user_id, text):
-    menu_keys = ['menu_feed', 'menu_likes', 'menu_matches', 'menu_profile',
+    menu_keys =['menu_feed', 'menu_likes', 'menu_matches', 'menu_profile',
                  'menu_support', 'menu_admin', 'menu_language']
     for key in menu_keys:
         if text == t(user_id, key): return True
     return False
 
 def build_profile_caption(profile, user_id):
-    interests = json.loads(profile['interests']) if profile['interests'] else []
+    interests = json.loads(profile['interests']) if profile['interests'] else[]
     lang = get_user_lang(user_id)
     city_display = get_city_display_name(profile['city'], lang)
     caption = f"👤 {profile['name']}, {profile['age']}\n📍 {city_display}\n"
@@ -372,7 +378,7 @@ def build_profile_caption(profile, user_id):
     caption += f"⭐ {profile['rating']:.1f} ({profile['rating_count']} "
     caption += {"ru": "отзывов", "ka": "შეფასება"}.get(lang, "reviews") + ")\n\n"
     if profile['bio']: caption += f"📝 {profile['bio']}\n\n"
-    translated_interests = [translate_interest(user_id, i) for i in interests]
+    translated_interests =[translate_interest(user_id, i) for i in interests]
     caption += f"💫 {', '.join(translated_interests)}"
     return caption
 
@@ -613,7 +619,7 @@ async def process_photos(message: types.Message, state: FSMContext):
         # Back to zodiac step
         await message.answer(t(user_id, 'choose_zodiac'), reply_markup=get_zodiac_keyboard(user_id))
         await state.set_state(RegistrationState.waiting_for_zodiac); return
-    data = await state.get_data(); photos = data.get('photos', [])
+    data = await state.get_data(); photos = data.get('photos',[])
     if message.photo:
         if len(photos) >= MAX_PHOTOS: await message.answer(t(user_id, 'photo_max', max=MAX_PHOTOS)); return
         photo = message.photo[-1]; photos.append(photo.file_id); await state.update_data(photos=photos)
@@ -644,12 +650,18 @@ async def process_bio(message: types.Message, state: FSMContext):
 @dp.callback_query(RegistrationState.waiting_for_interests)
 async def process_interests(query: types.CallbackQuery, state: FSMContext):
     user_id = query.from_user.id
-    data = await state.get_data(); interests = data.get('interests', [])
+    data = await state.get_data(); interests = data.get('interests',[])
     if query.data == "interests_back":
         await query.message.answer(t(user_id, 'enter_bio'), reply_markup=get_bio_keyboard(user_id))
         await state.set_state(RegistrationState.waiting_for_bio); return
-    if query.data == "interests_done":
-        if len(interests) == 0: await query.answer(t(user_id, 'interests_min')); return
+        
+    if query.data in ("interests_done", "interests_skip"):
+        if query.data == "interests_done" and len(interests) == 0: 
+            await query.answer(t(user_id, 'interests_min')); return
+            
+        if query.data == "interests_skip":
+            interests =[]
+            
         user_data = await state.get_data(); language = user_data.get('language', 'ru')
         db.create_user(user_id=user_id, name=user_data['name'], gender=user_data['gender'],
                        age=user_data['age'], city=user_data['city'], language=language)
@@ -659,6 +671,7 @@ async def process_interests(query: types.CallbackQuery, state: FSMContext):
                        registration_complete=True, last_seen=datetime.now().isoformat())
         await query.message.answer(t(user_id, 'reg_complete'), reply_markup=get_main_menu_keyboard(user_id))
         await state.set_state(MainMenuState.main_menu); return
+        
     if query.data.startswith("interest_"):
         interest = query.data.replace("interest_", "")
         if interest in interests: interests.remove(interest)
@@ -692,7 +705,7 @@ async def show_incoming_likes(message: types.Message, state: FSMContext):
     if not incoming:
         await message.answer(t(user_id, 'likes_empty')); return
     # Filter out banned users and get valid profiles
-    valid_likes = []
+    valid_likes =[]
     for liker_id in incoming:
         liker = db.get_user(liker_id)
         if liker and not liker['is_banned']:
@@ -739,7 +752,7 @@ async def likes_back(query: types.CallbackQuery, state: FSMContext):
 async def _show_next_incoming_like(query, state):
     user_id = query.from_user.id
     data = await state.get_data()
-    likes = data.get('incoming_likes', []); idx = data.get('likes_index', 0) + 1
+    likes = data.get('incoming_likes',[]); idx = data.get('likes_index', 0) + 1
     await state.update_data(likes_index=idx)
     if idx >= len(likes):
         await query.message.answer(t(user_id, 'likes_no_more'), reply_markup=get_main_menu_keyboard(user_id))
@@ -824,7 +837,8 @@ async def process_complaint(query: types.CallbackQuery, state: FSMContext):
     user_id = query.from_user.id; db.add_complaint(user_id, to_user_id, complaint_type)
     from_user = db.get_user(user_id); to_user = db.get_user(to_user_id)
     try:
-        from_name = from_user['name'] if from_user else '?'; to_name = to_user['name'] if to_user else '?'
+        from_name = escape(from_user['name']) if from_user else '?'
+        to_name = escape(to_user['name']) if to_user else '?'
         admin_text = f"🚨 Новая жалоба!\n\nОт: <a href='tg://user?id={user_id}'>{from_name}</a> (ID: <code>{user_id}</code>)\nНа: <a href='tg://user?id={to_user_id}'>{to_name}</a> (ID: <code>{to_user_id}</code>)\nТип: {complaint_type}"
         await bot.send_message(ADMIN_ID, admin_text, parse_mode="HTML")
     except Exception as e: logger.error(f"Failed to notify admin about complaint: {e}")
@@ -843,16 +857,14 @@ async def show_reviews(query: types.CallbackQuery, state: FSMContext):
     text = t(user_id, 'reviews_title', name=target_user['name'])
     text += t(user_id, 'reviews_summary', rating=summary['avg'], count=summary['count'])
     if summary['positive_tags']:
-        tags_str = ', '.join(
-            [
+        tags_str = ', '.join([
                 f"{translate_positive_tag(user_id, tag)} ({count})"
                 for tag, count in summary['positive_tags']
             ]
         )
         text += t(user_id, 'reviews_positive_summary', tags=tags_str)
     if summary['negative_tags']:
-        tags_str = ', '.join(
-            [
+        tags_str = ', '.join([
                 f"{translate_negative_tag(user_id, tag)} ({count})"
                 for tag, count in summary['negative_tags']
             ]
@@ -1041,7 +1053,7 @@ async def rate_stars_selected(query: types.CallbackQuery, state: FSMContext):
     await state.update_data(rating_date_id=date_id, rating_stars=stars, pos_tags=[], neg_tags=[])
     await query.message.answer(
         t(user_id, 'rate_positive'),
-        reply_markup=get_positive_tags_keyboard(user_id, date_id, stars, []),
+        reply_markup=get_positive_tags_keyboard(user_id, date_id, stars,[]),
     )
 
 @dp.callback_query(F.data.startswith("pos_tag_"))
@@ -1049,7 +1061,7 @@ async def select_positive_tag(query: types.CallbackQuery, state: FSMContext):
     user_id = query.from_user.id
     parts = query.data.split("_", 3); date_id = int(parts[2]); rest = parts[3]
     first_underscore = rest.index("_"); stars = int(rest[:first_underscore]); tag = rest[first_underscore+1:]
-    data = await state.get_data(); pos_tags = data.get('pos_tags', [])
+    data = await state.get_data(); pos_tags = data.get('pos_tags',[])
     if tag in pos_tags: pos_tags.remove(tag)
     else: pos_tags.append(tag)
     await state.update_data(pos_tags=pos_tags)
@@ -1063,7 +1075,7 @@ async def select_positive_tag(query: types.CallbackQuery, state: FSMContext):
 @dp.callback_query(F.data.startswith("done_pos_tags_"))
 async def done_positive_tags(query: types.CallbackQuery, state: FSMContext):
     user_id = query.from_user.id; parts = query.data.split("_"); date_id = int(parts[3]); stars = int(parts[4])
-    data = await state.get_data(); neg_tags = data.get('neg_tags', [])
+    data = await state.get_data(); neg_tags = data.get('neg_tags',[])
     await query.message.answer(
         t(user_id, 'rate_negative'),
         reply_markup=get_negative_tags_keyboard(user_id, date_id, stars, neg_tags),
@@ -1074,7 +1086,7 @@ async def select_negative_tag(query: types.CallbackQuery, state: FSMContext):
     user_id = query.from_user.id
     parts = query.data.split("_", 3); date_id = int(parts[2]); rest = parts[3]
     first_underscore = rest.index("_"); stars = int(rest[:first_underscore]); tag = rest[first_underscore+1:]
-    data = await state.get_data(); neg_tags = data.get('neg_tags', [])
+    data = await state.get_data(); neg_tags = data.get('neg_tags',[])
     if tag in neg_tags: neg_tags.remove(tag)
     else: neg_tags.append(tag)
     await state.update_data(neg_tags=neg_tags)
@@ -1094,7 +1106,7 @@ async def done_negative_tags(query: types.CallbackQuery, state: FSMContext):
 async def save_review(query: types.CallbackQuery, state: FSMContext):
     user_id = query.from_user.id; is_anonymous = query.data.startswith("review_anon_")
     parts = query.data.split("_"); date_id = int(parts[2]); stars = int(parts[3])
-    data = await state.get_data(); pos_tags = data.get('pos_tags', []); neg_tags = data.get('neg_tags', [])
+    data = await state.get_data(); pos_tags = data.get('pos_tags', []); neg_tags = data.get('neg_tags',[])
     date_record = db.get_date(date_id)
     if date_record:
         match = db.get_match_by_id(date_record['match_id'])
@@ -1112,7 +1124,7 @@ async def show_profile(message: types.Message, state: FSMContext):
     if not user: await message.answer(t(user_id, 'profile_not_found')); return
     if user['is_banned']:
         await message.answer(t(user_id, 'banned_message')); return
-    interests = json.loads(user['interests']) if user['interests'] else []
+    interests = json.loads(user['interests']) if user['interests'] else[]
     text = t(user_id, 'profile_title') + t(user_id, 'profile_name', name=user['name'])
     lang = get_user_lang(user_id)
     text += t(user_id, 'profile_age', age=user['age']) + t(user_id, 'profile_city', city=get_city_display_name(user['city'], lang))
@@ -1122,10 +1134,13 @@ async def show_profile(message: types.Message, state: FSMContext):
     if user['bio']: text += t(user_id, 'profile_bio', bio=user['bio'])
     translated_interests = [translate_interest(user_id, i) for i in interests]
     text += t(user_id, 'profile_interests', interests=', '.join(translated_interests))
+    
+    # Обновленная клавиатура для профиля (добавлена кнопка "Мои отзывы")
     builder = InlineKeyboardBuilder()
     builder.button(text=t(user_id, 'menu_edit'), callback_data="profile_edit")
     builder.button(text=t(user_id, 'menu_photos'), callback_data="profile_view_photos")
-    builder.adjust(2)
+    builder.button(text=t(user_id, 'menu_my_reviews'), callback_data=f"reviews_{user_id}")
+    builder.adjust(2, 1)
     await message.answer(text, reply_markup=builder.as_markup())
 
 async def view_photos_internal(user_id, message):
@@ -1317,7 +1332,7 @@ async def edit_photo_process(message: types.Message, state: FSMContext):
 @dp.callback_query(MainMenuState.editing_profile, F.data == "edit_interests")
 async def edit_interests_start(query: types.CallbackQuery, state: FSMContext):
     user_id = query.from_user.id; user = db.get_user(user_id)
-    current_interests = json.loads(user['interests']) if user['interests'] else []
+    current_interests = json.loads(user['interests']) if user['interests'] else[]
     await state.update_data(interests=current_interests, editing_interests=True)
     await query.message.answer(t(user_id, 'edit_choose_interests'), reply_markup=get_interests_keyboard(user_id, current_interests))
     await state.set_state(MainMenuState.edit_interests)
@@ -1325,16 +1340,22 @@ async def edit_interests_start(query: types.CallbackQuery, state: FSMContext):
 @dp.callback_query(MainMenuState.edit_interests)
 async def process_edit_interests(query: types.CallbackQuery, state: FSMContext):
     user_id = query.from_user.id
-    data = await state.get_data(); interests = data.get('interests', [])
+    data = await state.get_data(); interests = data.get('interests',[])
     if query.data == "interests_back":
         await query.message.answer(t(user_id, 'edit_title'), reply_markup=get_edit_profile_keyboard(user_id))
         await state.set_state(MainMenuState.editing_profile); return
-    if query.data == "interests_done":
-        if len(interests) == 0: await query.answer(t(user_id, 'interests_min')); return
+        
+    if query.data in ("interests_done", "interests_skip"):
+        if query.data == "interests_done" and len(interests) == 0:
+            await query.answer(t(user_id, 'interests_min')); return
+        if query.data == "interests_skip":
+            interests =[]
+            
         db.update_user(user_id, interests=json.dumps(interests))
         await query.message.answer(t(user_id, 'edit_saved'))
         await query.message.answer(t(user_id, 'action_choose'), reply_markup=get_main_menu_keyboard(user_id))
         await state.set_state(MainMenuState.main_menu); return
+        
     if query.data.startswith("interest_"):
         interest = query.data.replace("interest_", "")
         if interest in interests: interests.remove(interest)
@@ -1418,15 +1439,27 @@ async def show_complaints(message: types.Message, state: FSMContext):
     if message.from_user.id != ADMIN_ID: return
     complaints = db.get_pending_complaints()
     if not complaints:
-        await message.answer(t(message.from_user.id, 'complaint_sent'))
+        await message.answer(t(message.from_user.id, 'admin_no_complaints'))
         return
+        
     for complaint in complaints:
-        from_user = db.get_user(complaint['from_user_id']); to_user = db.get_user(complaint['to_user_id'])
-        from_name = from_user['name'] if from_user else 'Удалён'; to_name = to_user['name'] if to_user else 'Удалён'
-        text = f"📋 Жалоба #{complaint['complaint_id']}\n\nОт: <a href='tg://user?id={complaint['from_user_id']}'>{from_name}</a> (ID: <code>{complaint['from_user_id']}</code>)\nНа: <a href='tg://user?id={complaint['to_user_id']}'>{to_name}</a> (ID: <code>{complaint['to_user_id']}</code>)\nТип: {complaint['complaint_type']}\nОписание: {complaint['description']}\n"
+        from_user = db.get_user(complaint['from_user_id'])
+        to_user = db.get_user(complaint['to_user_id'])
+        
+        from_name = escape(from_user['name']) if from_user else 'Удалён'
+        to_name = escape(to_user['name']) if to_user else 'Удалён'
+        desc = escape(complaint['description']) if complaint.get('description') else 'Нет описания'
+        
+        text = (f"📋 <b>Жалоба #{complaint['complaint_id']}</b>\n\n"
+                f"От: <a href='tg://user?id={complaint['from_user_id']}'>{from_name}</a> (ID: <code>{complaint['from_user_id']}</code>)\n"
+                f"На: <a href='tg://user?id={complaint['to_user_id']}'>{to_name}</a> (ID: <code>{complaint['to_user_id']}</code>)\n"
+                f"Тип: {complaint['complaint_type']}\n"
+                f"Описание: {desc}\n")
+                
         builder = InlineKeyboardBuilder()
         builder.button(text="✅ Одобрить", callback_data=f"resolve_complaint_{complaint['complaint_id']}_approved")
-        builder.button(text="❌ Отклонить", callback_data=f"resolve_complaint_{complaint['complaint_id']}_rejected"); builder.adjust(2)
+        builder.button(text="❌ Отклонить", callback_data=f"resolve_complaint_{complaint['complaint_id']}_rejected")
+        builder.adjust(2)
         await message.answer(text, reply_markup=builder.as_markup(), parse_mode="HTML")
 
 @dp.callback_query(F.data.startswith("resolve_complaint_"))
@@ -1445,21 +1478,25 @@ async def resolve_complaint(query: types.CallbackQuery):
 @dp.message(MainMenuState.in_admin, lambda m: m.text == t(m.from_user.id, 'admin_menu_users'))
 async def manage_users(message: types.Message, state: FSMContext):
     if message.from_user.id != ADMIN_ID: return
-    await message.answer(t(message.from_user.id, 'action_choose'))
+    await message.answer(t(message.from_user.id, 'admin_enter_user_id'), reply_markup=get_back_keyboard(message.from_user.id))
     await state.set_state(MainMenuState.admin_search_user)
 
 @dp.message(MainMenuState.admin_search_user)
 async def search_user(message: types.Message, state: FSMContext):
     if is_back(message.from_user.id, message.text):
-        await message.answer(t(message.from_user.id, 'admin_title'), reply_markup=get_admin_keyboard()); await state.set_state(MainMenuState.in_admin); return
+        await message.answer(t(message.from_user.id, 'admin_title'), reply_markup=get_admin_keyboard())
+        await state.set_state(MainMenuState.in_admin); return
     try:
         user_id = int(message.text.strip()); user = db.get_user(user_id)
         if not user: await message.answer(t(message.from_user.id, 'error')); return
         text = f"👤 {user['name']}\nID: {user['user_id']}\nВозраст: {user['age']}\nГород: {user['city']}\n⭐ Рейтинг: {user['rating']:.1f} ({user['rating_count']} оценок)\nЯзык: {user.get('language', 'ru')}\nЗаблокирован: {'Да' if user['is_banned'] else 'Нет'}\n"
+        
         builder = InlineKeyboardBuilder()
-        builder.button(text="🚫 Ban", callback_data=f"admin_ban_{user_id}")
-        builder.button(text="🔓 Unban", callback_data=f"admin_unban_{user_id}")
-        builder.button(text="🔄 Reset profile", callback_data=f"admin_full_reset_{user_id}"); builder.adjust(1)
+        builder.button(text=t(message.from_user.id, 'admin_btn_ban'), callback_data=f"admin_ban_{user_id}")
+        builder.button(text=t(message.from_user.id, 'admin_btn_unban'), callback_data=f"admin_unban_{user_id}")
+        builder.button(text=t(message.from_user.id, 'admin_btn_reset'), callback_data=f"admin_full_reset_{user_id}")
+        builder.adjust(1)
+        
         await message.answer(text, reply_markup=builder.as_markup()); await state.set_state(MainMenuState.in_admin)
     except ValueError: await message.answer(t(message.from_user.id, 'error'))
 
@@ -1470,7 +1507,7 @@ async def admin_ban_user(query: types.CallbackQuery):
     try:
         await bot.send_message(user_id, t(user_id, 'banned_message'))
     except: pass
-    await query.answer("✅ User banned")
+    await query.answer("✅ Пользователь заблокирован")
 
 @dp.callback_query(F.data.startswith("admin_reset_rating_"))
 async def admin_reset_rating(query: types.CallbackQuery):
@@ -1482,46 +1519,59 @@ async def admin_reset_rating(query: types.CallbackQuery):
 async def admin_full_reset(query: types.CallbackQuery):
     if query.from_user.id != ADMIN_ID: return
     user_id = int(query.data.split("_")[3])
-    if db.full_reset_user_profile(user_id): await query.answer("✅ Profile reset")
+    if db.full_reset_user_profile(user_id): await query.answer("✅ Рейтинг и отзывы пользователя успешно обнулены")
     else: await query.answer("❌ Error")
 
 @dp.callback_query(F.data.startswith("admin_unban_"))
 async def admin_unban_user(query: types.CallbackQuery):
     if query.from_user.id != ADMIN_ID: return
     user_id = int(query.data.split("_")[2]); db.unban_user(user_id)
-    await query.answer("✅ User unbanned")
+    await query.answer("✅ Пользователь разблокирован")
 
 @dp.message(MainMenuState.in_admin, lambda m: m.text == t(m.from_user.id, 'admin_menu_stats'))
 async def show_stats(message: types.Message):
     if message.from_user.id != ADMIN_ID: return
     stats = db.get_stats()
-    text = f"📊 Stats:\n\n👥 Users: {stats['total_users']}\n❤️ Matches: {stats['total_matches']}\n✅ Completed dates: {stats['confirmed_dates']}\n\n📍 By city:\n"
-    for city, count in stats['city_stats'].items(): text += f"  {city}: {count}\n"
+    
+    text = t(message.from_user.id, 'admin_stats', 
+             total_users=stats['total_users'], 
+             total_matches=stats['total_matches'], 
+             confirmed_dates=stats['confirmed_dates'])
+             
+    lang = get_user_lang(message.from_user.id)
+    for city_ru, count in stats['city_stats'].items():
+        city_display = get_city_display_name(city_ru, lang)
+        text += f"  {city_display}: {count}\n"
+        
     await message.answer(text)
 
 @dp.message(MainMenuState.in_admin, lambda m: m.text == t(m.from_user.id, 'admin_menu_broadcast'))
 async def broadcast(message: types.Message, state: FSMContext):
     if message.from_user.id != ADMIN_ID: return
-    await message.answer(t(message.from_user.id, 'action_choose')); await state.set_state(MainMenuState.admin_broadcast)
+    await message.answer(t(message.from_user.id, 'admin_broadcast_prompt'), reply_markup=get_back_keyboard(message.from_user.id))
+    await state.set_state(MainMenuState.admin_broadcast)
 
 @dp.message(MainMenuState.admin_broadcast)
 async def send_broadcast(message: types.Message, state: FSMContext):
     if is_back(message.from_user.id, message.text):
-        await message.answer(t(message.from_user.id, 'admin_title'), reply_markup=get_admin_keyboard()); await state.set_state(MainMenuState.in_admin); return
+        await message.answer(t(message.from_user.id, 'admin_title'), reply_markup=get_admin_keyboard())
+        await state.set_state(MainMenuState.in_admin); return
+        
     if message.from_user.id != ADMIN_ID: return
     users = db.get_all_users(); sent_count = 0
     for user in users:
         try: await bot.send_message(user['user_id'], message.text); sent_count += 1
         except Exception as e: logger.error(f"Failed to send broadcast to {user['user_id']}: {e}")
-    await message.answer(f"✅ Sent to {sent_count} users")
-    await message.answer(t(message.from_user.id, 'action_choose'), reply_markup=get_admin_keyboard()); await state.set_state(MainMenuState.in_admin)
+    await message.answer(f"✅ Успешно отправлено {sent_count} пользователям")
+    await message.answer(t(message.from_user.id, 'admin_title'), reply_markup=get_admin_keyboard())
+    await state.set_state(MainMenuState.in_admin)
 
 @dp.message(MainMenuState.in_admin, lambda m: m.text == t(m.from_user.id, 'admin_menu_welcome'))
 async def admin_welcome(message: types.Message, state: FSMContext):
     if message.from_user.id != ADMIN_ID: return
     # Show current welcome messages
     text = "👋 Приветственные сообщения:\n\n"
-    for lang_code, lang_name in [('ru', '🇷🇺 Русский'), ('en', '🇬🇧 English'), ('ka', '🇬🇪 ქართული'), ('es', '🇪🇸 Español'), ('de', '🇩🇪 Deutsch')]:
+    for lang_code, lang_name in[('ru', '🇷🇺 Русский'), ('en', '🇬🇧 English'), ('ka', '🇬🇪 ქართული'), ('es', '🇪🇸 Español'), ('de', '🇩🇪 Deutsch')]:
         msg = db.get_setting(f'welcome_msg_{lang_code}', '—')
         text += f"{lang_name}:\n{msg}\n\n"
     text += "Выберите язык для редактирования:"
@@ -1581,3 +1631,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+```
