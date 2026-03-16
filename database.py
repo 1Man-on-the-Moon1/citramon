@@ -22,21 +22,18 @@ def _ensure_db_path(path: str) -> str:
     return normalized
 
 def _resolve_database_path() -> str:
-    env_path = os.environ.get("DATABASE_PATH", "")
-    candidates = [
-        env_path,
-        "/data/vibestar.db",
-        "/app/data/vibestar.db",
-        os.path.join(os.getcwd(), "vibestar.db"),
-        "/tmp/vibestar.db",
-    ]
-    candidates = [c for c in candidates if c]
-    for candidate in candidates:
-        try:
-            return _ensure_db_path(candidate)
-        except OSError:
-            continue
-    raise RuntimeError("Unable to initialize writable SQLite database path")
+    # 1. Если путь задан принудительно через переменные окружения
+    env_path = os.environ.get("DATABASE_PATH")
+    if env_path:
+        return _ensure_db_path(env_path)
+        
+    # 2. RAILWAY: Проверяем наличие папки /data (путь из вашего скриншота)
+    # os.name != 'nt' гарантирует, что мы не попытаемся искать диск C:\data на вашем Windows
+    if os.name != 'nt' and os.path.isdir("/data"):
+        return _ensure_db_path("/data/vibestar.db")
+        
+    # 3. ЛОКАЛЬНО: Запасной вариант для вашего компьютера
+    return _ensure_db_path(os.path.join(os.getcwd(), "vibestar.db"))
 
 DATABASE_PATH = _resolve_database_path()
 
@@ -133,7 +130,7 @@ def init_db():
         value TEXT NOT NULL,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
     # Insert default welcome messages if not exist
-    for lang in ['ru', 'en', 'ka', 'es', 'de']:
+    for lang in['ru', 'en', 'ka', 'es', 'de']:
         default_msg = {
             'ru': 'Наши правила просты',
             'en': 'Our rules are simple',
@@ -177,7 +174,7 @@ class Database:
         conn = self.get_connection(); cursor = conn.cursor()
         try:
             fields = ', '.join([f'{k} = ?' for k in kwargs.keys()])
-            values = list(kwargs.values()) + [user_id]
+            values = list(kwargs.values()) +[user_id]
             cursor.execute(f'UPDATE users SET {fields}, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?', values)
             conn.commit(); return True
         finally: conn.close()
@@ -385,7 +382,7 @@ class Database:
         return [dict(row) for row in rows]
     def get_user_reviews_summary(self, user_id):
         ratings = self.get_user_ratings(user_id)
-        if not ratings: return {'count': 0, 'avg': 0.0, 'positive_tags': [], 'negative_tags': [], 'ratings': []}
+        if not ratings: return {'count': 0, 'avg': 0.0, 'positive_tags': [], 'negative_tags': [], 'ratings':[]}
         total_stars = sum(r['stars'] for r in ratings)
         count = len(ratings)
         avg = total_stars / count if count > 0 else 0.0
@@ -519,7 +516,7 @@ class Database:
             WHERE l.to_user_id = ? AND m.match_id IS NULL
             ORDER BY l.liked_at DESC''', (user_id,))
         rows = cursor.fetchall(); conn.close()
-        return [row['from_user_id'] for row in rows]
+        return[row['from_user_id'] for row in rows]
     def get_all_users(self):
         conn = self.get_connection(); cursor = conn.cursor()
         cursor.execute('SELECT user_id, name, city, rating FROM users WHERE registration_complete = 1')
